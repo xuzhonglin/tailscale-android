@@ -27,7 +27,6 @@ import (
 	"gioui.org/widget/material"
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/exp/shiny/materialdesign/icons"
-	"inet.af/netaddr"
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/ipn"
 	"tailscale.com/tailcfg"
