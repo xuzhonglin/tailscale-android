@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: Build Package
 
 # Controls when the workflow will run
 on:
@@ -31,8 +31,8 @@ jobs:
 
       # Runs a set of commands using the runners shell
       - name: build tailscale-fdroid.apk
-        run: docker run -v /home/runner/work/tailscale-android/tailscale-android:/build/tailscale-android tailscale-android make tailscale-fdroid.apk 
-        
+        run: docker run -v /home/runner/work/tailscale-android/tailscale-android:/build/tailscale-android tailscale-android make tailscale-fdroid.apk
+
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v3.0.0
         with:
@@ -45,4 +45,4 @@ jobs:
 
 
           retention-days: 30 # optional
-        
+
