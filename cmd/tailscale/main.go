@@ -16,6 +16,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -638,7 +639,7 @@ func (s *BackendState) updateExitNodes() {
 	for _, p := range peers {
 		canRoute := false
 		for _, r := range p.AllowedIPs {
-			if r == netaddr.MustParseIPPrefix("0.0.0.0/0") || r == netaddr.MustParseIPPrefix("::/0") {
+			if r == netip.MustParsePrefix("0.0.0.0/0") || r == netip.MustParsePrefix("::/0") {
 				canRoute = true
 				break
 			}
@@ -1038,7 +1039,7 @@ func (a *App) updateState(act jni.Object, state *clientState) {
 			name := strings.ToLower(p.Name)
 			var addr string
 			if len(p.Addresses) > 0 {
-				addr = p.Addresses[0].IP().String()
+				addr = p.Addresses[0].Addr().String()
 			}
 			if !strings.Contains(host, q) && !strings.Contains(name, q) && !strings.Contains(addr, q) {
 				continue
