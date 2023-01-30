@@ -3,13 +3,13 @@ name: go-licenses
 on:
   # run action when a change lands in the main branch which updates go.mod or
   # our license template file. Also allow manual triggering.
-  push:
-    branches:
-      - main
-    paths:
-      - go.mod
-      - .github/licenses.tmpl
-      - .github/workflows/go-licenses.yml
+#  push:
+#    branches:
+#      - main
+#    paths:
+#      - go.mod
+#      - .github/licenses.tmpl
+#      - .github/workflows/go-licenses.yml
   workflow_dispatch:
 
 concurrency:
