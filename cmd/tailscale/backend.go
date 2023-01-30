@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/tailscale/tailscale-android/jni"
+	"github.com/tailscale/wireguard-go/tun"
 	"golang.org/x/sys/unix"
-	"golang.zx2c4.com/wireguard/tun"
 	"tailscale.com/ipn"
 	"tailscale.com/ipn/ipnlocal"
 	"tailscale.com/logpolicy"
@@ -81,6 +81,12 @@ var googleDNSServers = []netip.Addr{
 // VPN status was revoked.
 var errVPNNotPrepared = errors.New("VPN service not prepared or was revoked")
 
+// errMultipleUsers is used when we get a "INTERACT_ACROSS_USERS" error, which
+// happens due to a bug in Android. See:
+//
+//	https://github.com/tailscale/tailscale/issues/2180
+var errMultipleUsers = errors.New("VPN cannot be created on this device due to an Android bug with multiple users")
+
 func newBackend(dataDir string, jvm *jni.JVM, appCtx jni.Object, store *stateStore,
 	settings settingsFunc) (*backend, error) {
 
@@ -135,13 +141,12 @@ func newBackend(dataDir string, jvm *jni.JVM, appCtx jni.Object, store *stateSto
 	}
 	ns.ProcessLocalIPs = false // let Android kernel handle it; VpnBuilder sets this up
 	ns.ProcessSubnets = true   // for Android-being-an-exit-node support
-	lb, err := ipnlocal.NewLocalBackend(logf, b.logIDPublic, store, dialer, engine, 0)
+	lb, err := ipnlocal.NewLocalBackend(logf, b.logIDPublic, store, "", dialer, engine, 0)
 	if err != nil {
 		engine.Close()
 		return nil, fmt.Errorf("runBackend: NewLocalBackend: %v", err)
 	}
-	ns.SetLocalBackend(lb)
-	if err := ns.Start(); err != nil {
+	if err := ns.Start(lb); err != nil {
 		return nil, fmt.Errorf("startNetstack: %w", err)
 	}
 	b.engine = engine
@@ -151,9 +156,7 @@ func newBackend(dataDir string, jvm *jni.JVM, appCtx jni.Object, store *stateSto
 
 func (b *backend) Start(notify func(n ipn.Notify)) error {
 	b.backend.SetNotifyCallback(notify)
-	return b.backend.Start(ipn.Options{
-		StateKey: "ipn-android",
-	})
+	return b.backend.Start(ipn.Options{})
 }
 
 func (b *backend) LinkChange() {
@@ -266,6 +269,9 @@ func (b *backend) updateTUN(service jni.Object, rcfg *router.Config, dcfg *dns.O
 		establish := jni.GetMethodID(env, bcls, "establish", "()Landroid/os/ParcelFileDescriptor;")
 		parcelFD, err := jni.CallObjectMethod(env, builder, establish)
 		if err != nil {
+			if strings.Contains(err.Error(), "INTERACT_ACROSS_USERS") {
+				return errMultipleUsers
+			}
 			return fmt.Errorf("VpnService.Builder.establish: %v", err)
 		}
 		if parcelFD == 0 {
@@ -322,19 +328,7 @@ func (b *backend) SetupLogs(logDir string, logID logtail.PrivateID) {
 		},
 		HTTPC: &http.Client{Transport: logpolicy.NewLogtailTransport(logtail.DefaultHost)},
 	}
-	drainCh := make(chan struct{})
-	logcfg.DrainLogs = drainCh
-	go func() {
-		// Upload logs infrequently. Interval chosen arbitrarily.
-		// The objective is to reduce phone power use.
-		t := time.NewTicker(2 * time.Minute)
-		for range t.C {
-			select {
-			case drainCh <- struct{}{}:
-			default:
-			}
-		}
-	}()
+	logcfg.FlushDelayFn = func() time.Duration { return 2 * time.Minute }
 
 	filchOpts := filch.Options{
 		ReplaceStderr: true,

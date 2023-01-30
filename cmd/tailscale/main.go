@@ -27,6 +27,7 @@ import (
 	"unsafe"
 
 	"gioui.org/app"
+	"gioui.org/io/key"
 	"gioui.org/io/system"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -193,6 +194,7 @@ type (
 	WebAuthEvent      struct{}
 	GoogleAuthEvent   struct{}
 	LogoutEvent       struct{}
+	OSSLicensesEvent  struct{}
 	BeExitNodeEvent   bool
 	ExitAllowLANEvent bool
 )
@@ -348,9 +350,9 @@ func (a *App) runBackend() error {
 			configErrs <- b.updateTUN(service, cfg.rcfg, cfg.dcfg)
 		case n := <-notifications:
 			exitWasOnline := state.ExitStatus == ExitOnline
-			if p := n.Prefs; p != nil {
+			if p := n.Prefs; p != nil && n.Prefs.Valid() {
 				first := state.Prefs == nil
-				state.Prefs = p.Clone()
+				state.Prefs = p.AsStruct()
 				state.updateExitNodes()
 				if first {
 					state.Prefs.Hostname = a.hostname()
@@ -367,6 +369,9 @@ func (a *App) runBackend() error {
 				if service != 0 {
 					if cfg.rcfg != nil && state.State >= ipn.Starting {
 						if err := b.updateTUN(service, cfg.rcfg, cfg.dcfg); err != nil {
+							if errors.Is(err, errMultipleUsers) {
+								a.pushNotify(service, "Multiple Users", multipleUsersText)
+							}
 							log.Printf("VPN update failed: %v", err)
 							notifyVPNClosed()
 						}
@@ -437,9 +442,15 @@ func (a *App) runBackend() error {
 			case SetLoginServerEvent:
 				state.Prefs.ControlURL = e.URL
 				b.backend.SetPrefs(state.Prefs)
-				// A hack to get around ipnlocal's inability to update
-				// ControlURL after Start()... Can we re-init instead?
-				os.Exit(0)
+				// Need to restart to force the login URL to be regenerated
+				// with the new control URL. Start from a goroutine to avoid
+				// deadlock.
+				go func() {
+					err := b.backend.Start(ipn.Options{})
+					if err != nil {
+						fatalErr(err)
+					}
+				}()
 			case LogoutEvent:
 				go b.backend.Logout()
 			case ConnectEvent:
@@ -495,11 +506,7 @@ func (a *App) runBackend() error {
 					notifyVPNClosed()
 				}
 			}
-		case connected := <-onConnectivityChange:
-			if state.LostInternet != !connected {
-				log.Printf("LostInternet state change: %v -> %v", state.LostInternet, !connected)
-			}
-			state.LostInternet = !connected
+		case <-onConnectivityChange:
 			if b != nil {
 				go b.LinkChange()
 			}
@@ -945,10 +952,9 @@ func (a *App) runUI() error {
 				}
 			case system.DestroyEvent:
 				return e.Err
-			case *system.CommandEvent:
-				if e.Type == system.CommandBack {
+			case key.Event:
+				if e.Name == key.NameBack {
 					if ui.onBack() {
-						e.Cancel = true
 						w.Invalidate()
 					}
 				}
@@ -1138,6 +1144,8 @@ func (a *App) processUIEvents(w *app.Window, events []UIEvent, act jni.Object, s
 			a.updateState(act, state)
 		case FileSendEvent:
 			a.sendFiles(e, files)
+		case OSSLicensesEvent:
+			a.setURL("https://tailscale.com/licenses/android")
 		}
 	}
 }
@@ -1406,3 +1414,6 @@ func randHex(n int) string {
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
+
+const multipleUsersText = "Tailscale can't start due to an Android bug when multiple users are present on this device. " +
+	"Please see https://tailscale.com/s/multi-user-bug for more information."

@@ -45,7 +45,8 @@ public class IPNService extends VpnService {
 	}
 
 	private PendingIntent configIntent() {
-		return PendingIntent.getActivity(this, 0, new Intent(this, IPNActivity.class), PendingIntent.FLAG_UPDATE_CURRENT);
+		return PendingIntent.getActivity(this, 0, new Intent(this, IPNActivity.class),
+			PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 	}
 
 	private void disallowApp(VpnService.Builder b, String name) {
@@ -77,6 +78,10 @@ public class IPNService extends VpnService {
 
 		// GoPro https://github.com/tailscale/tailscale/issues/2554
 		this.disallowApp(b, "com.gopro.smarty");
+
+		// Sonos https://github.com/tailscale/tailscale/issues/2548
+		this.disallowApp(b, "com.sonos.acr");
+		this.disallowApp(b, "com.sonos.acr2");
 
 		return b;
 	}
