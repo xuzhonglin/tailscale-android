@@ -39,7 +39,7 @@ tag_release:
 
 bumposs: toolchain
 	GOPROXY=direct go get tailscale.com@main
-	go mod tidy -compat=1.19
+	go mod tidy -compat=1.20
 
 toolchain:
 ifneq ($(TOOLCHAINWANT),$(TOOLCHAINSUM))
@@ -73,7 +73,7 @@ tailscale-fdroid.apk: toolchain
 release_aar: toolchain
 release_aar:
 	mkdir -p android/libs
-	go run gioui.org/cmd/gogio -ldflags "-X tailscale.com/version.Long=$(VERSIONNAME) -X tailscale.com/version.Short=$(VERSIONNAME_SHORT) -X tailscale.com/version.GitCommit=$(TAILSCALE_COMMIT) -X tailscale.com/version.ExtraGitCommit=$(OUR_VERSION)" -buildmode archive -target android -appid $(APPID) -tags novulkan -o $(AAR) github.com/tailscale/tailscale-android/cmd/tailscale
+	go run gioui.org/cmd/gogio -ldflags "-X tailscale.com/version.longStamp=$(VERSIONNAME) -X tailscale.com/version.shortStamp=$(VERSIONNAME_SHORT) -X tailscale.com/version.gitCommitStamp=$(TAILSCALE_COMMIT) -X tailscale.com/version.extraGitCommitStamp=$(OUR_VERSION)" -buildmode archive -target android -appid $(APPID) -tags novulkan -o $(AAR) github.com/tailscale/tailscale-android/cmd/tailscale
 
 $(RELEASE_AAB): release_aar
 	(cd android && ./gradlew test bundlePlayRelease)
